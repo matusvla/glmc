@@ -22,6 +22,7 @@ func init() {
 	flag.StringVar(&cliInput.groupName, "g", "", "GitLab group name")
 	flag.BoolVar(&cliInput.verbose, "v", false, "verbose output of git")
 	flag.BoolVar(&cliInput.quiet, "q", false, "quieter output")
+	flag.BoolVar(&cliInput.dryRun, "dry", false, "dry run")
 }
 
 type cliFlags struct {
@@ -31,6 +32,7 @@ type cliFlags struct {
 	groupName      string
 	verbose        bool
 	quiet          bool
+	dryRun         bool
 }
 
 func (f *cliFlags) validate() ([]string, bool) {
@@ -87,13 +89,19 @@ func main() {
 			defer workerWg.Done()
 			for repoURL := range repoURLsCh {
 
-				destinationPath := path.Join(cliInput.destinationDir, strings.TrimPrefix(repoURL, "https://"+gitLabAddr))
+				destSubdir := strings.TrimPrefix(repoURL, "https://"+gitLabAddr)
+				destSubdir = strings.TrimSuffix(destSubdir, ".git")
+				destinationPath := path.Join(cliInput.destinationDir, destSubdir)
 				if !cliInput.quiet {
 					fmt.Printf("(%d/%d) Cloning %s to %s\n", atomic.LoadInt32(&processed), len(repoURLs), repoURL, destinationPath)
 				} else {
 					fmt.Printf("\r (%d/%d)", atomic.LoadInt32(&processed), len(repoURLs))
 				}
 
+				if cliInput.dryRun {
+					fmt.Printf("Dry run: would be cloning repo %s to %s\n", repoURL, destinationPath)
+					continue
+				}
 				err := cloneRepo(repoURL, destinationPath, cliInput.verbose && !cliInput.quiet)
 				if err != nil {
 					if !cliInput.quiet { // todo this could be done in a nicer way - as logging levels
